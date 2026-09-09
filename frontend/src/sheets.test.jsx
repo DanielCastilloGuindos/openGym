@@ -75,7 +75,7 @@ describe('exercise configuration progression step', () => {
     expect(save.disabled).toBe(false)
 
     act(() => { save.click() })
-    expect(config.onSave).toHaveBeenCalledWith(expect.objectContaining({ inc: 0.5 }))
+    expect(config.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: ex.id, inc: 0.5 }))
     expect(useUI.getState().sheets).toHaveLength(0)
   })
 })

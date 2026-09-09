@@ -397,7 +397,7 @@ export default function RoutineEdit() {
           deleteLabel={t('Remove from routine')}
           onDelete={() => edit(x => { x.splice(i, 1); cleanupSg(x) })}
           onClick={() => {
-            exConfigSheet(ex, e, cfg => edit(x => { x[i] = { id: x[i].id, sg: x[i].sg, ...cfg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)
+            exConfigSheet(ex, e, cfg => edit(x => { x[i] = { ...cfg, id: cfg.id || x[i].id, sg: x[i].sg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)
           }}>
           <Thumb ex={ex} />
           <div className="grow"><div className="tt capitalize">{exerciseNameFor(ex)}</div><div className="ss">{exLine(e, S.unit)}</div>

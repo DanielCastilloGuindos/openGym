@@ -211,6 +211,21 @@ describe('routine move controls', () => {
       entry('c2', 20, 'g')
     ])
   })
+
+  it('updates the exercise id and configuration when swapped for a variant', () => {
+    setRoutine([entry('c1', 10)])
+    renderRoutine()
+    const item = itemFor('setup-10')
+    act(() => item.click())
+    expect(mocks.exConfigSheet).toHaveBeenCalled()
+    const [, , onSave] = mocks.exConfigSheet.mock.calls[0]
+    act(() => onSave({ id: 'c2', sets: 4, reps: 8, weight: 15 }))
+    const currentEx = useStore.getState().S.routines[0].ex[0]
+    expect(currentEx.id).toBe('c2')
+    expect(currentEx.sets).toBe(4)
+    expect(currentEx.reps).toBe(8)
+    expect(currentEx.weight).toBe(15)
+  })
 })
 
 describe('routine move-control locale coverage', () => {

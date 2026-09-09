@@ -1514,8 +1514,8 @@ function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
     // was. Mode-independent — a heavy triple, a plank and a cardio interval all rest.
     const restSec = Math.max(0, Math.round(c.restSec) || 0)
     const withRest = restSec ? { restSec } : {}
-    if (cardio) onSave({ sets, min: Math.max(1, Math.round(c.min) || 20), speed: Math.max(0, c.speed || 8), ...withNote, ...withRest })
-    else if (mode === 'time') onSave({ sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || 45), weight: Math.max(0, c.weight || 0), ...flags, ...prog, ...withNote, ...withWarmups, ...withRest })
+    if (cardio) onSave({ id: ex.id, sets, min: Math.max(1, Math.round(c.min) || 20), speed: Math.max(0, c.speed || 8), ...withNote, ...withRest })
+    else if (mode === 'time') onSave({ id: ex.id, sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || 45), weight: Math.max(0, c.weight || 0), ...flags, ...prog, ...withNote, ...withWarmups, ...withRest })
     else {
       // A unilateral target is stored even: the split has to divide, and a typed 15 would
       // otherwise plan seven reps on one side and eight on the other, every session.
@@ -1527,7 +1527,7 @@ function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
         range = normalizeRepRange(reps, c.repsMin, stride)
         reps = range.reps
       }
-      const out = { sets, mode: 'reps', reps, weight: Math.max(0, c.weight || 0), ...flags, ...(perSide ? { side: true } : {}), ...prog, ...withNote, ...withWarmups, ...withRest }
+      const out = { id: ex.id, sets, mode: 'reps', reps, weight: Math.max(0, c.weight || 0), ...flags, ...(perSide ? { side: true } : {}), ...prog, ...withNote, ...withWarmups, ...withRest }
       if (double) out.repsMin = range.repsMin
       // A ceiling below the working reps would tell you to add a set on day one.
       if (bw && !(out.weight > 0) && c.repsMax > 0) out.repsMax = Math.max(reps, Math.round(c.repsMax))
@@ -1696,7 +1696,14 @@ function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
       <div style={{ height: 8 }} />
       <Button variant="tinted" icon="shuffle" onClick={() => {
         close()
-        exercisePicker(newEx => exConfigSheet(newEx, { ...c, id: newEx.id }, onSave, onDelete, routine), {
+        exercisePicker((newEx, quick, pickerClose) => {
+          if (pickerClose) pickerClose()
+          if (quick) {
+            onSave({ id: newEx.id, ...defaultConfig(newEx.id) })
+          } else {
+            exConfigSheet(newEx, { ...c, id: newEx.id }, onSave, onDelete, routine)
+          }
+        }, {
           initialBp: ex.bp,
           variantOf: ex,
           title: t('Select variant')
