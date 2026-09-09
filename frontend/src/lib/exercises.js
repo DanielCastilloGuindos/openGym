@@ -1,8 +1,18 @@
 import { EXDB } from './exercises-data.js'
 import { USER_EXERCISE_MUSCLE_OVERRIDES, exerciseMuscleMetadataFor } from './exercise-muscle-batch-1.js'
-import { t, getVersion, exerciseNameSearchText } from './i18n-core.js'
+import { t, getVersion, exerciseNameSearchText, getLang } from './i18n-core.js'
+import { classifyExercise } from './classifications.js'
+import EX_ES from './exercises-es.js'
 
 export { EXDB }
+
+export const exName = idOrEx => {
+  if (!idOrEx) return ''
+  const ex = typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx
+  if (!ex) return typeof idOrEx === 'string' ? idOrEx : ''
+  if (getLang() === 'es' && EX_ES[ex.id]) return EX_ES[ex.id]
+  return ex.nameEn || ex.n
+}
 
 // The generated dataset remains the compatibility/raw export. The runtime catalogue applies
 // owner-approved muscle metadata as a narrow overlay, so imports and historical tests that rely
@@ -44,7 +54,25 @@ export const smOf = ex => {
 }
 
 export const EXIDX = {}
-CATALOGUE.forEach(e => { EXIDX[e.id] = e })
+CATALOGUE.forEach(e => {
+  let enName = e.n
+  e.nameEn = enName
+  Object.defineProperty(e, 'n', {
+    get() {
+      if (getLang() === 'es' && EX_ES[e.id]) {
+        return EX_ES[e.id]
+      }
+      return enName
+    },
+    set(v) {
+      enName = v
+    },
+    configurable: true,
+    enumerable: true
+  })
+  Object.assign(e, classifyExercise(e))
+  EXIDX[e.id] = e
+})
 export const BODYPARTS = [...new Set(CATALOGUE.map(e => e.bp))].sort()
 
 // Equipment options present in a given list of exercises, most common first (issue #6).
@@ -66,7 +94,10 @@ export function registerCustom(list) {
     if (builtIn) EXIDX[id] = builtIn
   })
   customIds = (list || []).map(e => e.id)
-  ;(list || []).forEach(e => { EXIDX[e.id] = e })
+  ;(list || []).forEach(e => {
+    Object.assign(e, classifyExercise(e))
+    EXIDX[e.id] = e
+  })
 }
 // Full searchable catalogue — customs first so your own exercises are easy to find.
 export const allExercises = st => [...(st.customEx || []), ...CATALOGUE]
@@ -126,14 +157,90 @@ export function matchesExerciseSearch(exercise, query) {
 }
 
 // Media normally sits next to the app (img/ and gif/, mounted into the web container).
-// A build can point them somewhere else — the demo build pulls them off a CDN instead of
-// shipping ~140 MB of images into the deployment. `import.meta.env` is undefined in plain
-// Node; the guard keeps this module loadable without Vite.
+// Defaults to the official open-source Exercise Dataset CDN (hasaneyldrm/exercises-dataset)
+// so that demonstration animations work out of the box anywhere without local asset server.
+export const CDN_IMG_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/images/'
+export const CDN_GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
+
 const ENV = import.meta.env || {}
-const IMG_BASE = ENV.VITE_IMG_BASE || 'img/'
-const GIF_BASE = ENV.VITE_GIF_BASE || 'gif/'
-export const imgSrc = ex => IMG_BASE + ex.img
-export const gifSrc = ex => GIF_BASE + ex.gif
+const IMG_BASE = ENV.VITE_IMG_BASE || CDN_IMG_BASE
+const GIF_BASE = ENV.VITE_GIF_BASE || CDN_GIF_BASE
+const isFullUrl = u => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:') || u.startsWith('blob:'))
+
+export const imgSrc = ex => {
+  if (!ex) return ''
+  const img = ex.img || ex.gif
+  if (!img) return ''
+  return isFullUrl(img) ? img : IMG_BASE + img
+}
+
+export const gifSrc = ex => {
+  if (!ex) return ''
+  const gif = ex.gif || ex.img
+  if (!gif) return ''
+  return isFullUrl(gif) ? gif : GIF_BASE + gif
+}
+
+/**
+ * Finds an open-source exercise with animated demonstration GIF
+ * matching a name or keywords in Spanish or English.
+ */
+export function findOpenSourceExerciseMedia(query) {
+  if (!query || typeof query !== 'string') return null
+  const q = query.trim().toLowerCase()
+  if (!q) return null
+
+  // 1. Direct match by ID
+  if (EXIDX[q] && (EXIDX[q].gif || EXIDX[q].img)) return EXIDX[q]
+
+  // 2. Exact name match (Spanish or English)
+  const exact = CATALOGUE.find(e => {
+    const es = (EX_ES[e.id] || '').toLowerCase()
+    const en = (e.nameEn || e.n || '').toLowerCase()
+    return es === q || en === q
+  })
+  if (exact && (exact.gif || exact.img)) return exact
+
+  // 3. Substring match if query is sufficiently specific (>= 4 chars)
+  if (q.length >= 4) {
+    const sub = CATALOGUE.find(e => {
+      const es = (EX_ES[e.id] || '').toLowerCase()
+      const en = (e.nameEn || e.n || '').toLowerCase()
+      return es.includes(q) || en.includes(q)
+    })
+    if (sub && (sub.gif || sub.img)) return sub
+  }
+
+  // 4. Token-based word scoring
+  const clean = q.replace(/[^a-z0-9áéíóúñ]+/gi, ' ').trim()
+  const stopWords = new Set(['con', 'de', 'del', 'la', 'el', 'los', 'las', 'en', 'para', 'y', 'a', 'the', 'with', 'and', 'for', 'in', 'on', 'at'])
+  const words = clean.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w))
+  if (!words.length) return null
+
+  let best = null
+  let bestScore = 0
+  for (const e of CATALOGUE) {
+    if (!e.gif && !e.img) continue
+    const es = (EX_ES[e.id] || '').toLowerCase()
+    const en = (e.nameEn || e.n || '').toLowerCase()
+    const target = `${es} ${en} ${e.tg || ''} ${e.bp || ''}`.toLowerCase()
+    let score = 0
+    for (const w of words) {
+      if (target.includes(w)) {
+        if (es.includes(w) || en.includes(w)) {
+          score += 2
+        } else {
+          score += 1
+        }
+      }
+    }
+    if (score > bestScore && score >= Math.min(2, words.length * 2)) {
+      bestScore = score
+      best = e
+    }
+  }
+  return best
+}
 
 // Cardio exercises log time + speed instead of weight × reps.
 export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'
