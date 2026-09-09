@@ -7,11 +7,12 @@ import { bestWeightFor } from '../lib/history.js'
 import { fmtNum } from '../lib/format.js'
 import { t, exerciseNameFor } from '../lib/i18n.js'
 import { Thumb } from '../components/Media.jsx'
-import { exerciseDetailSheet, addToRoutineSheet, customExSheet } from '../sheets.jsx'
+import { exerciseDetailSheet, addToRoutineSheet, customExSheet, classificationFilterSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import { tappable, useRevealActiveChip } from '../lib/use-sheet-keyboard.js'
 import { isFav, sortFavouritesFirst } from '../lib/favourites.js'
+import { CRITERIA, matchesClassificationFilters } from '../lib/classifications.js'
 
 export default function Library() {
   const nav = useNavigate()
@@ -19,11 +20,13 @@ export default function Library() {
   const [q, setQ] = useState('')
   const [bp, setBp] = useState('')
   const [eq, setEq] = useState('')
+  const [clsFilters, setClsFilters] = useState({})
   const [showAll, setShowAll] = useState(false)   // ignore the active equipment profile for this session
   const [shown, setShown] = useState(40)
   const bpStrip = useRef(null), eqStrip = useRef(null)
   const profile = activeProfile(S)
-  const base = allExercises(S).filter(e => (!bp || e.bp === bp) && matchExercise(e, q))
+  const activeClsCount = Object.values(clsFilters).filter(Boolean).length
+  const base = allExercises(S).filter(e => (!bp || e.bp === bp) && matchesClassificationFilters(e, clsFilters) && matchExercise(e, q))
   const eqFiltered = (profile && !showAll) ? base.filter(e => exAvailable(S, e)) : base
   const eqOpts = equipmentOf(eqFiltered)
   // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
@@ -32,6 +35,13 @@ export default function Library() {
   const f = sortFavouritesFirst(eqOn ? eqFiltered.filter(e => e.eq === eqOn) : eqFiltered, S)
   useRevealActiveChip(bpStrip, bp)
   useRevealActiveChip(eqStrip, eqOn)
+
+  const clearAllFilters = () => {
+    setBp('')
+    setEq('')
+    setClsFilters({})
+    setShown(40)
+  }
 
   return <>
     <div className="hdr"><div><h1>{t('Exercises')}</h1><div className="sub">{t('{0} exercises with animations', EXDB.length)}</div></div>
@@ -46,10 +56,27 @@ export default function Library() {
         {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
       </button>
     </div>}
-    <div className="chips" ref={bpStrip} style={{ marginBottom: eqOpts.length > 1 ? 8 : 12 }}>
+    <div className="chips" ref={bpStrip} style={{ marginBottom: 8 }}>
       <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(40) }}>{t('All')}</button>
       {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(40) }}>{t(b)}</button>)}
+      <button className={'chip' + (activeClsCount > 0 ? ' on' : '')} onClick={() => classificationFilterSheet(clsFilters, setClsFilters)}>
+        <Icon name="filter" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />
+        {t('Classification')}{activeClsCount > 0 ? ` (${activeClsCount})` : ''}
+      </button>
     </div>
+    {activeClsCount > 0 && (
+      <div className="chips" style={{ marginBottom: 8, gap: 5 }}>
+        {CRITERIA.map(c => {
+          const v = clsFilters[c.key]
+          if (!v) return null
+          const opt = c.options.find(o => o.value === v)
+          return <button key={c.key} className="chip on" style={{ fontSize: 12 }} onClick={() => setClsFilters(prev => ({ ...prev, [c.key]: '' }))}>
+            {t(c.label)}: {t(opt?.label || v)} ✕
+          </button>
+        })}
+        <button className="chip" style={{ fontSize: 12 }} onClick={() => setClsFilters({})}>{t('Clear filters')}</button>
+      </div>
+    )}
     {eqOpts.length > 1 && <div className="chips" ref={eqStrip} style={{ marginBottom: 12 }}>
       <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(40) }}>{t('Any equipment')}</button>
       {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>{t(x)}</button>)}
@@ -68,7 +95,17 @@ export default function Library() {
           <Button size="sm" variant="tinted" icon="plus" onClick={ev => { ev.stopPropagation(); addToRoutineSheet(e) }}>{t('Plan')}</Button>
         </div>
       })}
-      {f.length === 0 && <div className="empty"><div className="ico"><Icon name="magnifier" /></div>{t('No match')}</div>}
+      {f.length === 0 && (
+        <div className="empty">
+          <div className="ico"><Icon name="magnifier" /></div>
+          {t('No match')}
+          {(bp || eqOn || activeClsCount > 0) && (
+            <div style={{ marginTop: 10 }}>
+              <Button size="sm" variant="ghost" onClick={clearAllFilters}>{t('Clear filters')}</Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
     {f.length > shown && <><div style={{ height: 10 }} /><Button onClick={() => setShown(s => s + 40)}>{t('Show more')}</Button></>}
   </>

@@ -37,6 +37,9 @@ import { isFav, toggleFav, sortFavouritesFirst } from './lib/favourites.js'
 import { buildSessionEntries } from './lib/session-start.js'
 import { buildCombinedEntries, deriveSessionName } from './lib/session-merge.js'
 import { workoutsOn, backfillStart, backfillEnd, completeBackfill } from './lib/backfill.js'
+import { CRITERIA, getExerciseClassifications, matchesClassificationFilters, classifyExercise, computeVariantSimilarity, getOptionLabel } from './lib/classifications.js'
+import { getBiomechanicalProfile, localizeVariant } from './lib/biomechanics.js'
+import { findOpenSourceExerciseMedia } from './lib/exercises.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -622,11 +625,119 @@ function OneRM({ ex }) {
   </>
 }
 
+function BiomechanicsSection({ ex }) {
+  const profile = getBiomechanicalProfile(ex)
+  if (!profile || !profile.variants || profile.variants.length === 0) return null
+
+  const [activeIdx, setActiveIdx] = useState(0)
+  const currentVariant = profile.variants[activeIdx] || profile.variants[0]
+  const v = localizeVariant(currentVariant)
+
+  return (
+    <div style={{ marginTop: 18, borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', paddingTop: 14 }}>
+      <div className="row between" style={{ alignItems: 'center', marginBottom: 10 }}>
+        <h4 className="sec" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="sparkles" style={{ color: 'var(--acc)', fontSize: 14 }} />
+          {t('Biomechanical Analysis & Variants')}
+        </h4>
+        <span className="tag acc" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {profile.variants.length > 1 ? `${profile.variants.length} ${t('Variants') || 'variantes'}` : (t('Biomechanical Profile') || 'Biomecánica')}
+        </span>
+      </div>
+
+      {profile.variants.length > 1 && (
+        <div className="chips" style={{ marginBottom: 12, gap: 5, flexWrap: 'wrap' }}>
+          {profile.variants.map((variant, idx) => {
+            const loc = localizeVariant(variant)
+            const isSelected = idx === activeIdx
+            return (
+              <button
+                key={variant.id}
+                className={'chip' + (isSelected ? ' on' : '')}
+                style={{ fontSize: 12, padding: '5px 10px', height: 'auto' }}
+                onClick={() => setActiveIdx(idx)}
+              >
+                {loc.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="card" style={{ padding: '12px', background: 'var(--surface-2)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg)', marginBottom: 4 }}>
+          {v.name}
+        </div>
+        
+        <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 8 }}>
+          <b style={{ color: 'var(--fg)' }}>{t('Target Focus')}:</b> {v.focus}
+        </div>
+
+        <div style={{ fontSize: 12, color: 'var(--acc)', background: 'var(--surface-3)', padding: '6px 10px', borderRadius: 6, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span>⚡</span>
+          <span><b>{t('Activation Advantage')}:</b> {v.advantage}</span>
+        </div>
+
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <span className="tag" style={{ fontSize: 11 }}>
+            <Icon name="timer" style={{ fontSize: 11, marginRight: 3 }} />
+            {t('Peak Tension')}: <b>{v.peakTension}</b>
+          </span>
+          <span className="tag" style={{ fontSize: 11 }}>
+            {t('Joint Stress')}: <b>{v.jointStress}</b>
+          </span>
+          <span className="tag" style={{ fontSize: 11 }}>
+            {t('SFR')}: <b>{v.sfr}</b>
+          </span>
+        </div>
+
+        {v.activation && v.activation.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="dim small" style={{ marginBottom: 6, fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              {t('Muscle Activation Breakdown')} (EMG)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {v.activation.map(a => (
+                <div key={a.name}>
+                  <div className="row between small" style={{ marginBottom: 2, fontSize: 12 }}>
+                    <span style={{ fontWeight: a.isPrimary ? 600 : 400, color: a.isPrimary ? 'var(--fg)' : 'var(--muted)' }}>
+                      {a.name} {a.isPrimary ? '★' : ''}
+                    </span>
+                    <b className={a.isPrimary ? 'accent' : 'dim'}>{a.percent}%</b>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                    <div style={{ width: `${a.percent}%`, height: '100%', background: a.isPrimary ? 'var(--acc)' : 'var(--fg-dim)', borderRadius: 3, transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {v.cues && v.cues.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.06))', paddingTop: 8 }}>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="sparkles" style={{ fontSize: 12, color: 'var(--acc)' }} />
+              {t('Execution Cues')}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--fg)', lineHeight: 1.45 }}>
+              {v.cues.map((c, i) => (
+                <li key={i} style={{ marginBottom: 3 }}>{c}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ExerciseDetail({ ex, close }) {
   const st = useStore(s => s.S)
   const last = lastEntryFor(st, ex.id)
   const best = bestWeightFor(st, ex.id)
   const fav = isFav(st, ex.id)
+  const classifications = getExerciseClassifications(ex)
   const flipFav = () => {
     let on = false
     update(s => { on = toggleFav(s, ex.id) })
@@ -659,11 +770,56 @@ function ExerciseDetail({ ex, close }) {
       <h4 className="sec">{t('Bar weight')}</h4>
       <BarWeightEditor ex={ex} extra={t('You still log the total weight — the bar only feeds the per-side plate math.')} />
     </>}
+    <h4 className="sec" style={{ marginTop: 16 }}>{t('Classifications')}</h4>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6, margin: '8px 0 12px' }}>
+      {classifications.map(c => (
+        <div key={c.key} style={{ background: 'var(--surface-2)', padding: '8px 10px', borderRadius: 'var(--r-sm)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="dim" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Icon name={c.icon || 'target'} style={{ fontSize: 12 }} />
+            {c.label}
+          </span>
+          <b style={{ color: 'var(--fg)', fontSize: 12 }}>{c.valueLabel}</b>
+        </div>
+      ))}
+    </div>
     {!isCardio(ex) && <OneRM ex={ex} />}
+    <BiomechanicsSection ex={ex} />
     {instrFor(ex).length > 0 &&<><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{instrFor(ex).map((s, i) => <li key={i}>{s}</li>)}</ol></>}
   </>
 }
 export const exerciseDetailSheet = ex => ui().openSheet(close => <ExerciseDetail ex={ex} close={close} />)
+
+/* ============================ effort / RIR help sheet ============================ */
+const EFFORT_ROWS = [
+  [0, 10, 'Failure — could not complete another rep'],
+  [1, 9, '1 rep left in the tank'],
+  [2, 8, '2 reps left — heavy work'],
+  [3, 7, '3 reps left — solid working set'],
+  [4, 6, '4 reps left — moderate effort'],
+  ['5+', '≤5', 'Warm-up or light work'],
+]
+const EFFORT_TYPICAL = 2 // RIR 2 / RPE 8 highlighted
+export function effortHelpSheet() {
+  ui().openSheet(close => <>
+    <h3>{t('Effort per set')}</h3>
+    <div className="muted small" style={{ lineHeight: 1.5 }}>
+      {t('How hard a set was, logged next to weight and reps. Two scales for the same judgement, counted from opposite ends.')}
+    </div>
+    <div className="efftbl">
+      <div className="r hd"><span className="n">{t('RIR')}</span><span className="n">{t('RPE')}</span><span className="f">{t('How it felt')}</span></div>
+      {EFFORT_ROWS.map(([rir, rpe, feel], i) => (
+        <div key={rir} className={'r' + (i === EFFORT_TYPICAL ? ' on' : '')}>
+          <span className="n">{rir}</span><span className="n">{rpe}</span><span className="f">{t(feel)}</span>
+        </div>
+      ))}
+    </div>
+    <div className="dim small" style={{ lineHeight: 1.5, display: 'grid', gap: 8 }}>
+      <div>{t('RIR counts the reps you left; RPE reads the same effort off a 10-point scale — so RPE ≈ 10 − RIR. Pick the one you already think in.')}</div>
+      <div>{t('The highlighted row is where most working sets land. Sets you have already logged keep their own scale, and nothing else reads the value — progression and estimated 1RM are unaffected.')}</div>
+    </div>
+    <div style={{ height: 8 }} />
+  </>)
+}
 
 /* ============================ exercise history ============================ */
 // What you did on this exercise before, reachable mid-workout (issue #43): the curve first,
@@ -852,13 +1008,71 @@ function usageMap(st) {
   st.workouts.forEach(w => w.entries.forEach(e => { u[e.id] = (u[e.id] || 0) + 1 }))
   return u
 }
-function ExercisePicker({ onPick, close }) {
+function ClassificationFilterSheet({ filters, onChange, close }) {
+  const [draft, setDraft] = useState({ ...filters })
+  const activeCount = Object.values(draft).filter(Boolean).length
+
+  const setFilter = (key, val) => {
+    setDraft(prev => ({ ...prev, [key]: val || '' }))
+  }
+
+  const apply = () => {
+    onChange(draft)
+    close()
+  }
+
+  const reset = () => {
+    const empty = {}
+    CRITERIA.forEach(c => { empty[c.key] = '' })
+    setDraft(empty)
+    onChange(empty)
+    close()
+  }
+
+  return <>
+    <div className="row between" style={{ marginBottom: 12 }}>
+      <h3>{t('Filter by classification')}</h3>
+      {activeCount > 0 && <Button variant="ghost" size="sm" onClick={reset}>{t('Clear filters')}</Button>}
+    </div>
+    <div className="list" style={{ gap: 8, maxHeight: '68vh', overflowY: 'auto', paddingRight: 2 }}>
+      {CRITERIA.map(c => {
+        const curVal = draft[c.key] || ''
+        const curOpt = c.options.find(o => o.value === curVal)
+        return <div key={c.key} style={{ background: 'var(--surface-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <span className="row" style={{ gap: 6, fontWeight: 600, fontSize: 14 }}>
+              <Icon name={c.icon || 'target'} style={{ fontSize: 16, color: 'var(--acc)' }} />
+              {t(c.label)}
+            </span>
+            {curVal && <span className="tag acc" style={{ cursor: 'pointer' }} onClick={() => setFilter(c.key, '')}>✕ {t(curOpt?.label || curVal)}</span>}
+          </div>
+          <div className="chips" style={{ gap: 5 }}>
+            <button className={'chip nocap' + (!curVal ? ' on' : '')} onClick={() => setFilter(c.key, '')}>{t('All')}</button>
+            {c.options.map(opt => (
+              <button key={opt.value} className={'chip' + (curVal === opt.value ? ' on' : '')} onClick={() => setFilter(c.key, opt.value)}>
+                {t(opt.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+      })}
+    </div>
+    <div style={{ height: 14 }} />
+    <Button variant="primary" onClick={apply}>{t('Apply filters')}{activeCount > 0 ? ` (${activeCount})` : ''}</Button>
+  </>
+}
+export const classificationFilterSheet = (filters, onChange) =>
+  ui().openSheet(close => <ClassificationFilterSheet filters={filters} onChange={onChange} close={close} />)
+
+function ExercisePicker({ onPick, close, initialBp, lockBp, title, variantOf, origEx, onReset }) {
   const st = useStore(s => s.S)
   const usage = usageMap(st)
   const [q, setQ] = useState('')
-  const [bp, setBp] = useState('')          // '' = all, '★' = chosen, '☆' = favourites, else a body part
+  const [bp, setBp] = useState(initialBp || '')          // '' = all, '★' = chosen, '☆' = favourites, else a body part
   const [eq, setEq] = useState('')          // '' = any equipment
   const [showAll, setShowAll] = useState(false)
+  const [clsFilters, setClsFilters] = useState({})
+  const [exactOnly, setExactOnly] = useState(false)
   const [shown, setShown] = useState(50)
   const [byMuscle, setByMuscle] = useState(false)
   const searchRef = useRef(null)
@@ -866,35 +1080,91 @@ function ExercisePicker({ onPick, close }) {
   const onSearchFocus = useSheetKeyboard(searchRef)
   const all = allExercises(st)
   const profile = activeProfile(st)
-  const inScope = e => bp === '★' ? usage[e.id] : bp === '☆' ? isFav(st, e.id) : (!bp || e.bp === bp)
-  let base = all.filter(e => inScope(e) && matchExercise(e, q))
-  if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || exerciseNameFor(a).localeCompare(exerciseNameFor(b)))
+  const activeClsCount = Object.values(clsFilters).filter(Boolean).length
+
+  // If selecting a variant of a specific exercise
+  const sourceEx = variantOf ? (typeof variantOf === 'object' ? variantOf : exOr(variantOf)) : null
+  const sourceCls = sourceEx ? classifyExercise(sourceEx) : null
+  const originalEx = origEx ? (typeof origEx === 'object' ? origEx : exOr(origEx)) : null
+
+  const inScope = e => {
+    if (sourceEx && e.id === sourceEx.id) return false
+    const matchesBp = bp === '★' ? usage[e.id] : bp === '☆' ? isFav(st, e.id) : (!bp || e.bp === bp)
+    if (!matchesBp) return false
+    if (!matchesClassificationFilters(e, clsFilters)) return false
+    if (!matchExercise(e, q)) return false
+    if (exactOnly && sourceEx) {
+      const sim = computeVariantSimilarity(e, sourceEx)
+      return sim.isExact
+    }
+    return true
+  }
+
+  let base = all.filter(inScope)
+  if (sourceEx) {
+    base = [...base].sort((a, b) => {
+      const simA = computeVariantSimilarity(a, sourceEx)
+      const simB = computeVariantSimilarity(b, sourceEx)
+      if (simB.score !== simA.score) return simB.score - simA.score
+      if (simB.matchCount !== simA.matchCount) return simB.matchCount - simA.matchCount
+      return (usage[b.id] || 0) - (usage[a.id] || 0) || exerciseNameFor(a).localeCompare(exerciseNameFor(b))
+    })
+  } else if (bp === '★') {
+    base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || exerciseNameFor(a).localeCompare(exerciseNameFor(b)))
+  }
+
   const eqFiltered = (profile && !showAll) ? base.filter(e => exAvailable(st, e)) : base
   const eqOpts = equipmentOf(eqFiltered)
-  // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
   const eqOn = eqOpts.includes(eq) ? eq : ''
-  // Favourites float to the top of whatever the filters left (issue #6), the rest keeps its order.
-  const f = sortFavouritesFirst(eqOn ? eqFiltered.filter(e => e.eq === eqOn) : eqFiltered, st)
+  const f = sourceEx ? (eqOn ? eqFiltered.filter(e => e.eq === eqOn) : eqFiltered) : sortFavouritesFirst(eqOn ? eqFiltered.filter(e => e.eq === eqOn) : eqFiltered, st)
   const chosenCount = Object.keys(usage).length
   const favCount = (st.favEx || []).length
   const special = bp === '★' || bp === '☆'
   useRevealActiveChip(bpStrip, bp)
   useRevealActiveChip(eqStrip, eqOn)
+
   if (byMuscle) return <>
-    <div className="row between" style={{ marginBottom: 10 }}><h3>{t('Add exercise')}</h3>
+    <div className="row between" style={{ marginBottom: 10 }}><h3>{title || t('Add exercise')}</h3>
       <Button size="sm" variant="ghost" onClick={() => setByMuscle(false)}>{t('All')}</Button>
     </div>
     <MuscleExplorer onPick={onPick} />
   </>
 
   return <>
-    <div className="row between" style={{ marginBottom: 10 }}><h3>{t('Add exercise')}</h3>
-      <Button size="sm" variant="tinted" icon="target" onClick={() => setByMuscle(true)}>{t('By muscle')}</Button>
+    <div className="row between" style={{ marginBottom: 10 }}><h3>{title || t('Add exercise')}</h3>
+      {!sourceEx && <Button size="sm" variant="tinted" icon="target" onClick={() => setByMuscle(true)}>{t('By muscle')}</Button>}
     </div>
-    {/* .picker-search is what index.css keys the keyboard-aware sheet layout on: the sheet
-        lifts above the keys and the search stays put while the list scrolls under it. */}
+
+    {originalEx && sourceEx && originalEx.id !== sourceEx.id && (
+      <div className="card row between" style={{ padding: '10px 12px', marginBottom: 12, alignItems: 'center', background: 'var(--bg-subtle, rgba(255,255,255,0.06))', borderRadius: 12, border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
+        <div>
+          <div className="dim small" style={{ marginBottom: 2 }}>{t('Original exercise')}:</div>
+          <div style={{ fontWeight: 600, fontSize: 15 }} className="capitalize">{exerciseNameFor(originalEx)}</div>
+        </div>
+        <Button size="sm" variant="tinted" icon="reset" onClick={() => { if (onReset) onReset(close); else onPick(originalEx, close) }}>
+          {t('Reset to original')}
+        </Button>
+      </div>
+    )}
+
+    {sourceEx && sourceCls && (
+      <div className="card" style={{ padding: '10px 12px', marginBottom: 12, background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
+        <div className="dim small" style={{ marginBottom: 3 }}>{t('Finding variants for')}:</div>
+        <div style={{ fontWeight: 600, fontSize: 15 }} className="capitalize">{exerciseNameFor(sourceEx)}</div>
+        <div className="chips" style={{ marginTop: 6, gap: 4, flexWrap: 'wrap' }}>
+          <span className="tag acc" style={{ fontSize: 11 }}>{t(sourceEx.tg || sourceEx.bp)}</span>
+          <span className="tag" style={{ fontSize: 11 }}>{getOptionLabel('pat', sourceCls.pat)}</span>
+          <span className="tag" style={{ fontSize: 11 }}>{getOptionLabel('jnt', sourceCls.jnt)}</span>
+          <span className="tag" style={{ fontSize: 11 }}>{getOptionLabel('kin', sourceCls.kin)}</span>
+          <span className="tag" style={{ fontSize: 11 }}>{getOptionLabel('lat', sourceCls.lat)}</span>
+          <span className="tag" style={{ fontSize: 11 }}>{getOptionLabel('pln', sourceCls.pln)}</span>
+        </div>
+      </div>
+    )}
+
     <div className="picker-search"><div className="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-      <input ref={searchRef} className="input" placeholder={t('Search {0} exercises…', all.length)} value={q} onFocus={onSearchFocus} onChange={e => { setQ(e.target.value); setShown(50) }} /></div></div>
+      <input ref={searchRef} className="input" placeholder={t('Search {0} exercises…', (lockBp && bp) ? base.length : all.length)} value={q} onFocus={onSearchFocus} onChange={e => { setQ(e.target.value); setShown(50) }} /></div></div>
+
     {profile && <div className="small dim row" style={{ margin: '8px 0 2px', gap: 6, alignItems: 'center' }}>
       <Icon name="dumbbell" style={{ fontSize: 13 }} />
       {showAll ? t('Showing all equipment') : t('Showing what you have in "{0}"', profile.name)}
@@ -902,49 +1172,96 @@ function ExercisePicker({ onPick, close }) {
         {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
       </button>
     </div>}
+
     <div className="chips" ref={bpStrip} style={{ margin: eqOpts.length > 1 ? '10px 0 6px' : '10px 0' }}>
-      {favCount > 0 && <button className={'chip' + (bp === '☆' ? ' on' : '')} onClick={() => { setBp('☆'); setEq(''); setShown(50) }}><Icon name="starFill" className="fav-star" />{t('Favourites')} ({favCount})</button>}
+      {sourceEx && (
+        <button className={'chip' + (exactOnly ? ' on' : '')} onClick={() => { setExactOnly(!exactOnly); setShown(50) }}>
+          <Icon name="sparkles" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />{t('Exact match (9/9)')}
+        </button>
+      )}
+      {!sourceEx && favCount > 0 && <button className={'chip' + (bp === '☆' ? ' on' : '')} onClick={() => { setBp('☆'); setEq(''); setShown(50) }}><Icon name="starFill" className="fav-star" />{t('Favourites')} ({favCount})</button>}
       {chosenCount > 0 && <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}><Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />{t('Chosen')} ({chosenCount})</button>}
       <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(50) }}>{t('All')}</button>
-      {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(50) }}>{t(b)}</button>)}
+      {!lockBp && BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(50) }}>{t(b)}</button>)}
+      {lockBp && bp && <span className="chip on capitalize">{t(bp)}</span>}
+      <button className={'chip' + (activeClsCount > 0 ? ' on' : '')} onClick={() => classificationFilterSheet(clsFilters, setClsFilters)}>
+        <Icon name="filter" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />{t('Classification')}{activeClsCount > 0 ? ` (${activeClsCount})` : ''}
+      </button>
     </div>
+
+    {activeClsCount > 0 && (
+      <div className="chips" style={{ marginBottom: 8, gap: 5 }}>
+        {CRITERIA.map(c => {
+          const v = clsFilters[c.key]
+          if (!v) return null
+          const opt = c.options.find(o => o.value === v)
+          return <button key={c.key} className="chip on" style={{ fontSize: 12 }} onClick={() => setClsFilters(prev => ({ ...prev, [c.key]: '' }))}>
+            {t(c.label)}: {t(opt?.label || v)} ✕
+          </button>
+        })}
+        <button className="chip" style={{ fontSize: 12 }} onClick={() => setClsFilters({})}>{t('Clear filters')}</button>
+      </div>
+    )}
+
     {eqOpts.length > 1 && <div className="chips" ref={eqStrip} style={{ marginBottom: 10 }}>
       <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(50) }}>{t('Any equipment')}</button>
       {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(50) }}>{t(x)}</button>)}
     </div>}
+
     <div className="list">
-      {!special && <div className="item" {...tappable(() => customExSheet(null, ex => onPick(ex), q.trim()))}>
+      {!special && !lockBp && !sourceEx && <div className="item" {...tappable(() => customExSheet(null, ex => onPick(ex), q.trim()))}>
         <div className="thumb thumb-x"><Icon name="sparkles" /></div>
         <div className="grow"><div className="tt">{t('Create your own exercise')}</div><div className="ss">{t('name + body part, no animation')}</div></div><Icon name="plus" className="chev" />
       </div>}
-      {f.slice(0, shown).map(e => <div key={e.id} className="item" {...tappable(() => onPick(e))}>
-        <Thumb ex={e} /><div className="grow"><div className="tt capitalize">{isFav(st, e.id) && <Icon name="starFill" className="fav-star" />}{exerciseNameFor(e)}</div><div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}</div></div>
-        {/* Accent tag = already in a routine/log ("Chosen"); the yellow star by the name = favourite. */}
-        {usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>}
-        {/* A "+" glyph reads as "add this now" — it used to just open the same detail sheet as
-            tapping the row, so it added nothing until you'd scrolled past the sets/reps config
-            and found the real button. Now it does what it looks like: adds with the default
-            config right away. Tapping the row itself still opens the detail/config sheet, for
-            when you want to set sets/reps before adding. */}
-        <button className="iconbtn chev" aria-label={t('Add “{0}”', exerciseNameFor(e))} style={{ padding: 8, margin: -8 }}
-          onClick={ev => { ev.stopPropagation(); onPick(e, true) }}><Icon name="plus" /></button>
-      </div>)}
+      {f.slice(0, shown).map(e => {
+        const sim = sourceEx ? computeVariantSimilarity(e, sourceEx) : null
+        return (
+          <div key={e.id} className="item" {...tappable(() => onPick(e))}>
+            <Thumb ex={e} />
+            <div className="grow">
+              <div className="tt capitalize">{isFav(st, e.id) && <Icon name="starFill" className="fav-star" />}{exerciseNameFor(e)}</div>
+              <div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}</div>
+            </div>
+            {sourceEx ? (
+              <span className={'tag' + (sim?.isExact ? ' acc' : '')} style={{ fontSize: 11, fontWeight: sim?.isExact ? 600 : 400, flexShrink: 0 }}>
+                {sim?.isExact ? `★ 9/9 (${t('Identical biomechanics')})` : `${sim?.matchCount}/9 ${t('categories')}`}
+              </span>
+            ) : (
+              usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>
+            )}
+            <button className="iconbtn chev" aria-label={t('Add “{0}”', exerciseNameFor(e))} style={{ padding: 8, margin: -8 }}
+              onClick={ev => { ev.stopPropagation(); onPick(e, true) }}>
+              <Icon name={sourceEx || lockBp ? 'shuffle' : 'plus'} />
+            </button>
+          </div>
+        )
+      })}
       {f.length === 0 && bp === '★' && <div className="empty">{t('Nothing chosen yet — add exercises and they’ll show up here.')}</div>}
       {f.length === 0 && bp === '☆' && <div className="empty">{t('No favourites here — tap the star on an exercise to add it.')}</div>}
+      {f.length === 0 && !special && <div className="empty">{t('No exercises match your search.')}</div>}
     </div>
     {f.length > shown && <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>}
   </>
 }
-export const exercisePicker = onPick => ui().openSheet(close => <ExercisePicker onPick={onPick} close={close} />)
+export const exercisePicker = (onPick, opts = {}) => ui().openSheet(close => <ExercisePicker onPick={(ex, quick) => onPick(ex, quick, close)} close={close} {...opts} />)
 
 /** Start a safe swap for one exact active-workout occurrence. */
 export function swapActiveWorkoutExercise(index) {
   const active = S().active
   if (!active?.entries?.[index]) return
 
-  // The "+" on a picker row commits with the default config, exactly as it does in the add
-  // flows; tapping the row still opens the config sheet first.
-  const picker = exercisePicker((ex, quick) => quick ? swapTo(ex, defaultConfig(ex.id)) : exConfigSheet(ex, null, cfg => swapTo(ex, cfg), null, null))
+  const currentEntry = active.entries[index]
+  const curEx = exOr(currentEntry.id)
+  const origEx = currentEntry.origId && currentEntry.origId !== currentEntry.id ? exOr(currentEntry.origId) : null
+
+  const reset = origEx ? () => swapTo(origEx, defaultConfig(origEx.id)) : null
+  const picker = exercisePicker((ex, quick) => quick ? swapTo(ex, defaultConfig(ex.id)) : exConfigSheet(ex, null, cfg => swapTo(ex, cfg), null, null), {
+    initialBp: curEx.bp,
+    variantOf: curEx,
+    origEx,
+    onReset: reset,
+    title: t('Select variant')
+  })
   function swapTo(ex, cfg) {
     // The picker is a chooser here, not a stack you keep adding from: one swap, then back to
     // the workout. (The add flow deliberately leaves it open.)
@@ -953,6 +1270,7 @@ export function swapActiveWorkoutExercise(index) {
     const st = S()
     const current = st.active?.entries?.[index]
     if (!current) return
+    const origId = current.origId || current.id
     // A swap is an in-place substitution — routine identity is unchanged, so the replacement
     // keeps the slot's own `rid` and reads its prescription from that routine (not a
     // session-wide one). A slot with no `rid` is freestyle.
@@ -965,6 +1283,7 @@ export function swapActiveWorkoutExercise(index) {
     const built = buildSets(st, full, { step, ...(freestyle ? { preferLast: true } : {}), ...(plan?.kind === 'off' ? { useTarget: true } : {}) })
     const replacement = {
       id: ex.id,
+      origId,
       target: { ...cfg },
       plan,
       sets: applyIntensifierPlan(freestyle ? built : applyPrescription(built, plan, step), full),
@@ -1005,6 +1324,32 @@ export function swapActiveWorkoutExercise(index) {
       onConfirm: () => apply({ loggedConfirmed: true })
     })
   }
+}
+
+export function resetActiveWorkoutExercise(index) {
+  const active = S().active
+  const current = active?.entries?.[index]
+  if (!current?.origId || current.origId === current.id) return
+  const origEx = exOr(current.origId)
+  const full = { ...defaultConfig(origEx.id), id: origEx.id }
+  const st = S()
+  const slotRoutine = current.rid ? st.routines.find(r => r.id === current.rid) : null
+  const freestyle = !slotRoutine
+  const step = modeOf(full) === 'reps' ? weightIncrement(full, st.unit) : defaultIncrement(origEx.id, st.unit)
+  const plan = freestyle ? null : nextPrescription(st, full, slotRoutine)
+  const built = buildSets(st, full, { step, ...(freestyle ? { preferLast: true } : {}), ...(plan?.kind === 'off' ? { useTarget: true } : {}) })
+  const replacement = {
+    id: origEx.id,
+    origId: origEx.id,
+    target: { ...defaultConfig(origEx.id) },
+    plan,
+    sets: applyIntensifierPlan(freestyle ? built : applyPrescription(built, plan, step), full),
+    ...(current.rid ? { rid: current.rid } : {}),
+  }
+  ui().stopWork()
+  ui().stopRest()
+  update(state => { swapActiveExercise(state.active, index, replacement) }, true)
+  toast(t('Exercise replaced'))
 }
 
 /* ============================ equipment profiles ============================ */
@@ -1347,6 +1692,17 @@ function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
       placeholder={t('Note (optional) — loading cues, "bar only then +1 plate/side each set", anything worth remembering here')}
       value={c.note || ''} onChange={e => setC(x => ({ ...x, note: e.target.value }))} />
     <Button variant="primary" disabled={progressionStepInvalid} onClick={save}>{existing ? t('Save') : t('Add to routine')}</Button>
+    {existing && onSave && <>
+      <div style={{ height: 8 }} />
+      <Button variant="tinted" icon="shuffle" onClick={() => {
+        close()
+        exercisePicker(newEx => exConfigSheet(newEx, { ...c, id: newEx.id }, onSave, onDelete, routine), {
+          initialBp: ex.bp,
+          variantOf: ex,
+          title: t('Select variant')
+        })
+      }}>{t('Swap for a variant')}</Button>
+    </>}
     {ex.custom && <><div style={{ height: 8 }} /><Button icon="pencil" onClick={() => { close(); customExSheet(ex) }}>{t('Edit or delete this exercise')}</Button></>}
     {onDelete && <><div style={{ height: 8 }} /><Button variant="danger" onClick={() => { close(); onDelete() }}>{t('Remove from routine')}</Button></>}
   </>
