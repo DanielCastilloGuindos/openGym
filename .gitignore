@@ -5,8 +5,11 @@ media/gif/
 # Runtime data — users, passkeys, per-user state, session secret
 data/
 
-# Local config
+# Local config & IDE
 .env
+.env*.local
+*.local
+.vscode/
 
 # Build output / deps
 frontend/dist/
