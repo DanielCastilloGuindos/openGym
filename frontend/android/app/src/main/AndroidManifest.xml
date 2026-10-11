@@ -43,4 +43,17 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Gym check-in: scanning a membership QR/barcode with the camera. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Health Connect Permissions -->
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_HEALTH_CONNECT_SETTINGS" />
+        </intent>
+    </queries>
 </manifest>

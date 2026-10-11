@@ -22,6 +22,7 @@ import {
 import { Button, Segmented, SelectRow } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { isWarmupRow } from '../lib/workout-model.js'
+import { evaluateAchievements } from '../lib/achievements.js'
 
 // Which muscles the training in a window actually hit — and, the point of the card,
 // which ones it keeps missing. Shading is relative within the window (lib/muscles.js).
@@ -281,6 +282,88 @@ function EffortCard({ S }) {
   </div>
 }
 
+function AchievementsCard({ S }) {
+  const [filter, setFilter] = useState('all')
+  const achievements = useMemo(() => evaluateAchievements(S), [S])
+  const unlockedCount = achievements.filter(a => a.unlocked).length
+
+  const filtered = useMemo(() => {
+    if (filter === 'all') return achievements
+    if (filter === 'unlocked') return achievements.filter(a => a.unlocked)
+    return achievements.filter(a => a.category === filter)
+  }, [achievements, filter])
+
+  return <div className="card">
+    <div className="row between" style={{ marginBottom: 10 }}>
+      <div>
+        <h2 style={{ margin: 0 }}>{t('Achievements & Milestones')}</h2>
+        <div className="dim small" style={{ marginTop: 2 }}>
+          {t('{0} of {1} trophies unlocked', unlockedCount, achievements.length)}
+        </div>
+      </div>
+      <div style={{ fontSize: 24, color: 'var(--yellow)', display: 'flex', alignItems: 'center' }}>
+        <Icon name="trophy" />
+      </div>
+    </div>
+
+    <Segmented className="seg-range" value={filter} onChange={setFilter}
+      options={[
+        { value: 'all', label: t('All') },
+        { value: 'unlocked', label: t('Unlocked') },
+        { value: 'streak', label: t('Streaks') },
+        { value: 'workouts', label: t('Workouts') },
+        { value: 'volume', label: t('Volume') },
+        { value: 'prs', label: t('PRs') },
+      ]} />
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginTop: 12 }}>
+      {filtered.map(a => (
+        <div key={a.id} style={{
+          background: a.unlocked ? 'var(--surface-2)' : 'var(--surface-1, rgba(255,255,255,0.02))',
+          padding: '10px 12px',
+          borderRadius: 'var(--r-sm)',
+          border: '1px solid',
+          borderColor: a.unlocked ? 'var(--acc)' : 'var(--border-subtle, rgba(255,255,255,0.06))',
+          opacity: a.unlocked ? 1 : 0.65,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6
+        }}>
+          <div className="row between" style={{ alignItems: 'center' }}>
+            <span style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: a.unlocked ? (a.color || 'var(--acc)') + '25' : 'var(--surface-3)',
+              color: a.unlocked ? (a.color || 'var(--acc)') : 'var(--dim)',
+              fontSize: 16
+            }}>
+              <Icon name={a.icon || 'trophy'} />
+            </span>
+            <span className="small" style={{ fontWeight: 600, color: a.unlocked ? 'var(--acc)' : 'var(--dim)' }}>
+              {a.unlocked ? '✓ ' + t('Unlocked') : `${a.percentage}%`}
+            </span>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t(a.title)}</div>
+            <div className="dim small" style={{ fontSize: 12, lineHeight: 1.35, marginTop: 2 }}>{t(a.desc)}</div>
+          </div>
+
+          {!a.unlocked && (
+            <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+              <div style={{ width: `${a.percentage}%`, height: '100%', background: a.color || 'var(--acc)' }} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+}
+
 // Stats = the analytics hub: all charts, progress and history live here.
 export default function Stats() {
   const nav = useNavigate()
@@ -447,6 +530,8 @@ export default function Stats() {
 
     {workouts.length > 0 && <MuscleBalance S={S} />}
     {hasEffort(S) && <EffortCard S={S} />}
+
+    <AchievementsCard S={S} />
 
     <div className="cols">
       <div className="card">

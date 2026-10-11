@@ -12,6 +12,7 @@ import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, isAndroid, shareExport, syncReminder } from '../lib/mobile.js'
+import { isHealthConnectAvailable, openHealthConnectSettings } from '../lib/health-connect.js'
 import { checkForUpdate, downloadAndInstall } from '../lib/update.js'
 import { ConnectSheet } from './MobileOnboarding.jsx'
 import { starterPlanSheet, confirmSheet, importFromApp, importFromHevy, equipmentProfileSheet, menuSheet } from '../sheets.jsx'
@@ -47,6 +48,7 @@ export default function Settings() {
   // --- update check state ---
   const [updateInfo, setUpdateInfo] = useState(null) // { hasUpdate, latestVersion, apkUrl, hashUrl } | null
   const [android, setAndroid] = useState(false)
+  const [hcAvailable, setHcAvailable] = useState(false)
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
@@ -55,7 +57,13 @@ export default function Settings() {
     // already answers false off the mobile build; the MOBILE check on top keeps the web bundle
     // from even asking (and from calling gitlab.com on every Settings visit).
     if (!MOBILE) return
-    isAndroid().then(ok => { setAndroid(ok); if (ok) checkForUpdate().then(setUpdateInfo).catch(() => {}) })
+    isAndroid().then(ok => {
+      setAndroid(ok)
+      if (ok) {
+        checkForUpdate().then(setUpdateInfo).catch(() => {})
+        isHealthConnectAvailable().then(setHcAvailable)
+      }
+    })
   }, [])
 
   // The same check, on demand: the automatic one is silent when it finds nothing or cannot
@@ -207,6 +215,13 @@ export default function Settings() {
       <Row icon="sparkles" iconTint="var(--acc)" title={t('AI Coach')} accessory="chevron"
         subtitle={coachLocal?.mode === 'server' ? t('Runs on your openGym server') : coachLocal?.mode === 'byok' ? t('Runs on this phone with your own API key') : t('Off — choose how the Coach should run.')}
         onClick={() => nav('/coach/setup')} />
+    </Section>}
+
+    {/* ---------- integrations ---------- */}
+    {(MOBILE && android) && <Section title={t('Integrations')}>
+      <Row icon="heart" iconTint="var(--red)" title="Google Health Connect" accessory="chevron"
+        subtitle={hcAvailable ? t('Connected — syncs workouts, active calories & body weight.') : t('Tap to configure Health Connect permissions.')}
+        onClick={openHealthConnectSettings} />
     </Section>}
 
     {/* ---------- general ---------- */}

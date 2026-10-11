@@ -41,6 +41,9 @@ import { CRITERIA, getExerciseClassifications, matchesClassificationFilters, cla
 import { getBiomechanicalProfile, localizeVariant } from './lib/biomechanics.js'
 import { findOpenSourceExerciseMedia } from './lib/exercises.js'
 import { getExtendedCatalog, getExtendedDetails } from './lib/extended-catalog.js'
+import { checkNewAchievements } from './lib/achievements.js'
+import { fireConfetti } from './lib/confetti.js'
+import { syncWorkoutToHealthConnect } from './lib/health-connect.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -2432,8 +2435,12 @@ function WorkoutComplete({ close }) {
 }
 export const workoutCompleteSheet = () => ui().openSheet(close => <WorkoutComplete close={close} />, { kind: 'center' })
 
-function FinishSummary({ w, prs, e1prs = [], close }) {
+function FinishSummary({ w, prs, e1prs = [], newAchievements = [], close }) {
   const st = useStore(s => s.S)
+  useEffect(() => {
+    fireConfetti({ count: prs.length > 0 || newAchievements.length > 0 ? 120 : 60 })
+  }, [prs.length, newAchievements.length])
+
   return <div style={{ textAlign: 'center', padding: '8px 0' }}>
     <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="trophy" /></div>
     <h3 style={{ margin: '8px 0' }}>{t('Workout complete!')}</h3>
@@ -2443,6 +2450,20 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
       <div className="tile"><div className="l">{t('Sets')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{t('{0} sets · {1} work', setsDone(w), workSetsDone(w))}</div></div>
       <div className="tile"><div className="l">{t('PRs')}</div><div className="v" style={{ fontSize: 20 }}>{prs.length || '—'}</div></div>
     </div>
+    {newAchievements.length > 0 && <div style={{ textAlign: 'left', marginBottom: 12, background: 'var(--surface-2)', padding: '10px 12px', borderRadius: 'var(--r-sm)' }}>
+      <div className="small" style={{ fontWeight: 600, color: 'var(--yellow)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="medal" style={{ fontSize: 14 }} />{t('Milestones Unlocked!')}
+      </div>
+      {newAchievements.map(a => (
+        <div key={a.id} className="row small" style={{ gap: 8, padding: '4px 0', alignItems: 'center' }}>
+          <span style={{ color: a.color || 'var(--acc)', fontSize: 16 }}><Icon name={a.icon || 'trophy'} /></span>
+          <div>
+            <b>{t(a.title)}</b>
+            <div className="dim" style={{ fontSize: 11 }}>{t(a.desc)}</div>
+          </div>
+        </div>
+      ))}
+    </div>}
     {(prs.length > 0 || e1prs.length > 0) && <div style={{ textAlign: 'left', marginBottom: 12 }}>
       {prs.map(id => <div key={id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="trophy" style={{ fontSize: 13 }} />{t('New PR:')} {EXIDX[id] ? exerciseNameFor(EXIDX[id]) : id}</div>)}
       {e1prs.map(p => <div key={p.id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="chartLine" style={{ fontSize: 13 }} />{t('Best estimated 1RM:')} {EXIDX[p.id] ? exerciseNameFor(EXIDX[p.id]) : p.id} · {fmtNum(p.est)} {st.unit}</div>)}
@@ -2485,6 +2506,7 @@ function doFinishWorkout() {
     snapshotFor: e => EXIDX[e.id]?.custom ? exerciseMuscleSnapshot(EXIDX[e.id]) : null,
   })
   w.vol = workoutVolume(w)
+  let nextState = null
   update(s => {
     if (past) {
       s.workouts = completeBackfill(s.workouts, A, w)
@@ -2496,9 +2518,14 @@ function doFinishWorkout() {
       s.workouts.push(w)
     }
     s.active = null
+    nextState = s
   })
+  const newAchievements = !past ? checkNewAchievements(st, nextState || S()) : []
+  if (!past) {
+    syncWorkoutToHealthConnect(w, st.unit)
+  }
   useStore.getState().autoBackupNow()
   useUI.getState().stopRest()
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
-  ui().openSheet(close => <FinishSummary w={w} prs={prs} e1prs={e1prs} close={close} />, { kind: 'center', locked: true })
+  ui().openSheet(close => <FinishSummary w={w} prs={prs} e1prs={e1prs} newAchievements={newAchievements} close={close} />, { kind: 'center', locked: true })
 }
