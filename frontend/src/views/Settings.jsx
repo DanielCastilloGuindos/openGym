@@ -280,6 +280,12 @@ export default function Settings() {
           value={S.gifSize === 'mini' || S.gifSize === 'off' ? S.gifSize : 'full'}
           onChange={v => update(s => { s.gifSize = v })} />
       </Row>
+      <Row icon="play" iconTint="var(--indigo)" title={t('Animation type')}>
+        <Segmented className="seg-inline"
+          options={[{ value: 'gif', label: t('GIF') }, { value: 'video', label: t('Video') }]}
+          value={S.mediaType === 'video' ? 'video' : 'gif'}
+          onChange={v => update(s => { s.mediaType = v })} />
+      </Row>
       <Row icon="bell" iconTint="var(--pink)" title={t('Sounds')}>
         <Switch checked={!!S.sound} onChange={v => update(s => { s.sound = v })} />
       </Row>

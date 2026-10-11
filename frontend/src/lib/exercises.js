@@ -161,10 +161,12 @@ export function matchesExerciseSearch(exercise, query) {
 // so that demonstration animations work out of the box anywhere without local asset server.
 export const CDN_IMG_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/images/'
 export const CDN_GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
+export const CDN_VIDEO_BASE = 'https://lyftaweb.s3.us-east-2.amazonaws.com/GymvisualMP4/'
 
 const ENV = import.meta.env || {}
 const IMG_BASE = ENV.VITE_IMG_BASE || CDN_IMG_BASE
 const GIF_BASE = ENV.VITE_GIF_BASE || CDN_GIF_BASE
+const VIDEO_BASE = ENV.VITE_VIDEO_BASE || CDN_VIDEO_BASE
 const isFullUrl = u => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:') || u.startsWith('blob:'))
 
 export const imgSrc = ex => {
@@ -179,6 +181,13 @@ export const gifSrc = ex => {
   const gif = ex.gif || ex.img
   if (!gif) return ''
   return isFullUrl(gif) ? gif : GIF_BASE + gif
+}
+
+export const videoSrc = ex => {
+  if (!ex) return ''
+  if (ex.video) return isFullUrl(ex.video) ? ex.video : VIDEO_BASE + ex.video
+  const id = String(ex.id || '').padStart(4, '0')
+  return `${VIDEO_BASE}${id}1201.mp4`
 }
 
 /**

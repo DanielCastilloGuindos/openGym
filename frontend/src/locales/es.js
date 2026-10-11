@@ -422,6 +422,8 @@ export default {
   'Minimize': 'Minimizar',
   'Expand': 'Ampliar',
   'Exercise animations': 'Animaciones de los ejercicios',
+  'Animation type': 'Tipo de animación',
+  'Video': 'Vídeo',
   'Workout view': 'Vista del entrenamiento',
   'Cards': 'Tarjetas',
   'List': 'Lista',

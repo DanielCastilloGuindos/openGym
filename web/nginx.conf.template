@@ -57,8 +57,8 @@ server {
         add_header Content-Security-Policy "frame-ancestors 'none'" always;
     }
 
-    # Exercise images/GIFs never change → cache hard
-    location ~* \.(png|jpg|jpeg|gif|ico|svg|woff|woff2|webp|avif)$ {
+    # Exercise images/GIFs/videos never change → cache hard
+    location ~* \.(png|jpg|jpeg|gif|ico|svg|woff|woff2|webp|avif|mp4|webm)$ {
         expires 30d;
         add_header Cache-Control "public, max-age=2592000, immutable";
         add_header X-Frame-Options "DENY" always;

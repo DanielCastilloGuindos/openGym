@@ -71,4 +71,23 @@ describe('Media gifSize', () => {
     expect(host.querySelector('.exmedia img')).toBeTruthy()
     expect(host.querySelector('.exmedia.mini')).toBeFalsy()
   })
+
+  it('renders a video element when mediaType is video', () => {
+    mocks.S = { gifSize: 'full', mediaType: 'video' }
+    mount({})
+    expect(host.querySelector('.exmedia video')).toBeTruthy()
+    expect(host.querySelector('.exmedia img')).toBeFalsy()
+  })
+
+  it('falls back to img when video fails to load', () => {
+    mocks.S = { gifSize: 'full', mediaType: 'video' }
+    mount({})
+    const video = host.querySelector('.exmedia video')
+    expect(video).toBeTruthy()
+    act(() => {
+      video.dispatchEvent(new Event('error'))
+    })
+    expect(host.querySelector('.exmedia img')).toBeTruthy()
+    expect(host.querySelector('.exmedia video')).toBeFalsy()
+  })
 })

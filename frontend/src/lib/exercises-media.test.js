@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   CDN_IMG_BASE,
   CDN_GIF_BASE,
+  CDN_VIDEO_BASE,
   imgSrc,
   gifSrc,
+  videoSrc,
   findOpenSourceExerciseMedia,
   EXDB
 } from './exercises.js'
@@ -14,6 +16,7 @@ describe('open-source exercise media and animations', () => {
     expect(CDN_IMG_BASE).toContain('hasaneyldrm/exercises-dataset')
     expect(CDN_GIF_BASE).toContain('cdn.jsdelivr.net')
     expect(CDN_GIF_BASE).toContain('hasaneyldrm/exercises-dataset')
+    expect(CDN_VIDEO_BASE).toContain('GymvisualMP4')
   })
 
   it('resolves imgSrc and gifSrc with open-source CDN URLs', () => {
@@ -21,8 +24,10 @@ describe('open-source exercise media and animations', () => {
     expect(ex).toBeDefined()
     const img = imgSrc(ex)
     const gif = gifSrc(ex)
+    const vid = videoSrc(ex)
     expect(img).toBe(CDN_IMG_BASE + ex.img)
     expect(gif).toBe(CDN_GIF_BASE + ex.gif)
+    expect(vid).toBe(CDN_VIDEO_BASE + `${ex.id.padStart(4, '0')}1201.mp4`)
   })
 
   it('matches open-source exercises by exact id', () => {

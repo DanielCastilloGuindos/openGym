@@ -15,7 +15,7 @@ export const DEF = {
   unit: 'kg', restSec: 90, restPauseSec: 15, sound: true, timerFlash: false, keepAwake: true, lang: 'en',
   theme: 'dark', accent: 'lime', body: 'male', targetW: null,
   bodyweight: [], routines: [], week: {}, dayPlan: {},
-  exWeights: {}, workouts: [], active: null, customEx: [], gifSize: 'full',
+  exWeights: {}, workouts: [], active: null, customEx: [], gifSize: 'full', mediaType: 'gif',
   // How the active workout is laid out — 'cards' (one exercise at a time with Prev/Next),
   // 'list' (every exercise stacked and scrollable) or 'compact' (that stack stripped to just
   // names and set rows — no media, tags, notes, last-time or progression line). Purely
