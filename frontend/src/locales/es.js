@@ -1555,4 +1555,7 @@ export default {
   "Name it and pick a body part — demonstration animations from the open-source library are automatically matched.": "Ponle nombre y elige la parte del cuerpo; las animaciones de demostración de la biblioteca open source se asocian automáticamente.",
   "Change animation": "Cambiar animación",
   "Remove animation": "Quitar animación",
+  "Extended catalogue (+4,700)": "Catálogo extendido (+4.700)",
+  "Standard catalogue (1,300)": "Catálogo estándar (1.300)",
+  "Tips & Form": "Consejos y técnica",
 }

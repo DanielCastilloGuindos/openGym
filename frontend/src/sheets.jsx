@@ -40,6 +40,7 @@ import { workoutsOn, backfillStart, backfillEnd, completeBackfill } from './lib/
 import { CRITERIA, getExerciseClassifications, matchesClassificationFilters, classifyExercise, computeVariantSimilarity, getOptionLabel } from './lib/classifications.js'
 import { getBiomechanicalProfile, localizeVariant } from './lib/biomechanics.js'
 import { findOpenSourceExerciseMedia } from './lib/exercises.js'
+import { getExtendedCatalog, getExtendedDetails } from './lib/extended-catalog.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -743,6 +744,16 @@ function ExerciseDetail({ ex, close }) {
     update(s => { on = toggleFav(s, ex.id) })
     toast(on ? t('Added to favourites') : t('Removed from favourites'))
   }
+  const [extInfo, setExtInfo] = useState(null)
+  useEffect(() => {
+    if (ex?.id && String(ex.id).startsWith('ext_')) {
+      getExtendedDetails(ex.id).then(info => { if (info) setExtInfo(info) })
+    }
+  }, [ex?.id])
+
+  const steps = instrFor(ex).length > 0 ? instrFor(ex) : (extInfo?.st || [])
+  const tips = extInfo?.tips || []
+
   return <>
     <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
       <h3 className="capitalize">{exerciseNameFor(ex)}</h3>
@@ -758,7 +769,7 @@ function ExerciseDetail({ ex, close }) {
       <span className="tag"><Icon name="dumbbell" />{t(ex.eq)}</span>
       {(ex.secondaries?.length ? ex.secondaries : smOf(ex)).slice(0, 3).map((s, i) => <span key={i} className="tag">{t(s)}</span>)}
     </div>
-    {ex.desc && <div className="exnote">{ex.desc}</div>}
+    {(ex.desc || extInfo?.overview) && <div className="exnote">{ex.desc || extInfo?.overview}</div>}
     {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5 }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent">{fmtNum(best)} {st.unit}</b>{last ? ` · ${t('last')} ${fmtDate(last.d)}: ${last.sets.map(s => setLabel(ex.id, s, last.target)).join(', ')}` : ''}</div>}
     <Button variant="primary" icon="plus" style={{ margin: '10px 0 4px' }} onClick={() => addToRoutineSheet(ex)}>{t('Add to my plan')}</Button>
     {last && <Button icon="history" style={{ marginTop: 4 }} onClick={() => exerciseHistorySheet(ex.id)}>{t('History')}</Button>}
@@ -784,7 +795,8 @@ function ExerciseDetail({ ex, close }) {
     </div>
     {!isCardio(ex) && <OneRM ex={ex} />}
     <BiomechanicsSection ex={ex} />
-    {instrFor(ex).length > 0 &&<><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{instrFor(ex).map((s, i) => <li key={i}>{s}</li>)}</ol></>}
+    {steps.length > 0 && <><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{steps.map((s, i) => <li key={i}>{s}</li>)}</ol></>}
+    {tips.length > 0 && <><h4 className="sec" style={{ marginTop: 14 }}>{t('Tips & Form')}</h4><ul className="steps-list" style={{ listStyleType: 'disc', paddingLeft: 20 }}>{tips.map((tip, i) => <li key={i} style={{ marginBottom: 6 }}>{tip}</li>)}</ul></>}
   </>
 }
 export const exerciseDetailSheet = ex => ui().openSheet(close => <ExerciseDetail ex={ex} close={close} />)
@@ -1082,6 +1094,20 @@ function ExercisePicker({ onPick, close, initialBp, lockBp, title, variantOf, or
   const profile = activeProfile(st)
   const activeClsCount = Object.values(clsFilters).filter(Boolean).length
 
+  const [extended, setExtended] = useState(false)
+  const [extList, setExtList] = useState([])
+  const [extLoading, setExtLoading] = useState(false)
+
+  useEffect(() => {
+    if (extended && !extList.length) {
+      setExtLoading(true)
+      getExtendedCatalog().then(list => {
+        setExtList(list || [])
+        setExtLoading(false)
+      }).catch(() => setExtLoading(false))
+    }
+  }, [extended, extList.length])
+
   // If selecting a variant of a specific exercise
   const sourceEx = variantOf ? (typeof variantOf === 'object' ? variantOf : exOr(variantOf)) : null
   const sourceCls = sourceEx ? classifyExercise(sourceEx) : null
@@ -1091,7 +1117,7 @@ function ExercisePicker({ onPick, close, initialBp, lockBp, title, variantOf, or
     if (sourceEx && e.id === sourceEx.id) return false
     const matchesBp = bp === '★' ? usage[e.id] : bp === '☆' ? isFav(st, e.id) : (!bp || e.bp === bp)
     if (!matchesBp) return false
-    if (!matchesClassificationFilters(e, clsFilters)) return false
+    if (!extended && !matchesClassificationFilters(e, clsFilters)) return false
     if (!matchExercise(e, q)) return false
     if (exactOnly && sourceEx) {
       const sim = computeVariantSimilarity(e, sourceEx)
@@ -1100,7 +1126,8 @@ function ExercisePicker({ onPick, close, initialBp, lockBp, title, variantOf, or
     return true
   }
 
-  let base = all.filter(inScope)
+  const pool = extended ? extList : all
+  let base = pool.filter(inScope)
   if (sourceEx) {
     base = [...base].sort((a, b) => {
       const simA = computeVariantSimilarity(a, sourceEx)
@@ -1163,15 +1190,18 @@ function ExercisePicker({ onPick, close, initialBp, lockBp, title, variantOf, or
     )}
 
     <div className="picker-search"><div className="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-      <input ref={searchRef} className="input" placeholder={t('Search {0} exercises…', (lockBp && bp) ? base.length : all.length)} value={q} onFocus={onSearchFocus} onChange={e => { setQ(e.target.value); setShown(50) }} /></div></div>
+      <input ref={searchRef} className="input" placeholder={t('Search {0} exercises…', (lockBp && bp) ? base.length : (extended ? extList.length || 4741 : all.length))} value={q} onFocus={onSearchFocus} onChange={e => { setQ(e.target.value); setShown(50) }} /></div></div>
 
-    {profile && <div className="small dim row" style={{ margin: '8px 0 2px', gap: 6, alignItems: 'center' }}>
-      <Icon name="dumbbell" style={{ fontSize: 13 }} />
-      {showAll ? t('Showing all equipment') : t('Showing what you have in "{0}"', profile.name)}
-      <button className="chip nocap" style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12 }} onClick={() => setShowAll(v => !v)}>
-        {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
+    <div className="row" style={{ margin: '6px 0 2px', gap: 6, alignItems: 'center' }}>
+      <button className={'chip nocap' + (extended ? ' on' : '')} style={{ fontSize: 12, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => { setExtended(v => !v); setShown(50) }}>
+        <Icon name="sparkles" style={{ fontSize: 12 }} />
+        {extended ? t('Extended catalogue (+4,700)') : t('Standard catalogue (1,300)')}
       </button>
-    </div>}
+      {extLoading && <span className="small dim">{t('Loading…')}</span>}
+      {profile && <button className="chip nocap" style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12 }} onClick={() => setShowAll(v => !v)}>
+        {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
+      </button>}
+    </div>
 
     <div className="chips" ref={bpStrip} style={{ margin: eqOpts.length > 1 ? '10px 0 6px' : '10px 0' }}>
       {sourceEx && (
